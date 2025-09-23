@@ -5,7 +5,7 @@ const cookieParser = require("cookie-parser");
 const ejs = require("ejs");
 const fileUpload = require("express-fileupload");
 const { v4: uuidv4 } = require("uuid");
-const mysql = require("mysql");
+const mysql = require("mysql2");
 
 // Initialize Express App
 const app = express();
@@ -17,13 +17,19 @@ app.use(express.static("public"));
 app.use(express.json());
 app.use(cookieParser());
 app.use(fileUpload());
+app.use((req, res, next) => {
+  const ts = new Date().toISOString();
+  console.log(`[${ts}] ${req.method} ${req.originalUrl}`);
+  next();
+});
 
 // Database Connection
 const connection = mysql.createConnection({
   host: "localhost",
-  user: "root_2",
-  password: "1@HelloMoto",
+  user: "root",
+  password: "Hung24102004",
   database: "foodorderingwesitedb",
+  port : 3306
 });
 connection.connect();
 
@@ -415,28 +421,6 @@ function updatePassword(req, res) {
   );
 }
 
-// Admin Homepage
-
-function renderAdminHomepage(req, res) {
-  const userId = req.cookies.cookuid;
-  const userName = req.cookies.cookuname;
-  connection.query(
-    "SELECT admin_id, admin_name FROM admin WHERE admin_email = ? and admin_name = ?",
-    [userId, userName],
-    function (error, results) {
-      if (!error && results.length) {
-        res.render("adminHomepage", {
-          username: userName,
-          userid: userId,
-          items: results,
-        });
-      } else {
-        res.render("admin_signin");
-      }
-    }
-  );
-}
-
 // Admin Sign-in
 
 function renderAdminSignInPage(req, res) {
@@ -451,13 +435,43 @@ function adminSignIn(req, res) {
     [email, password],
     function (error, results) {
       if (error || !results.length) {
-        res.render("/admin_signin");
+        res.render("admin_signin");
       } else {
         const { admin_id, admin_name } = results[0];
         res.cookie("cookuid", admin_id);
         res.cookie("cookuname", admin_name);
-        res.render("adminHomepage");
+        res.redirect("/adminHomepage");
       }
+    }
+  );
+}
+// GET /adminHomepage
+function renderAdminHomepage(req, res) {
+  console.log("[GET] /adminHomepage cookies =", req.cookies);
+
+  const userId = req.cookies.cookuid;
+  const userName = req.cookies.cookuname;
+
+  connection.query(
+    "SELECT admin_id, admin_name FROM admin WHERE admin_id = ? AND admin_name = ?",
+    [userId, userName],
+    (error, results) => {
+      if (error) {
+        console.error("SQL error:", error);
+        return res.status(500).send("Database error");
+      }
+
+      if (!results.length) {
+        console.log("Invalid cookie -> back to login");
+        return res.render("admin_signin");
+      }
+
+      console.log("Render adminHomepage with", { userId, userName });
+      return res.render("adminHomepage", {
+        username: userName,
+        userid: userId,
+        items: results,
+      });
     }
   );
 }
@@ -664,7 +678,8 @@ function changePrice(req, res) {
 
 // Logout
 function logout(req, res) {
-  res.clearCookie();
+  res.clearCookie("cookuid");
+  res.clearCookie("cookuname");
   return res.redirect("/signin");
 }
 
